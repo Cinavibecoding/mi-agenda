@@ -1,8 +1,8 @@
 /* Mi agenda: guarda la app en el teléfono para que abra sin señal.
    La página se pide primero a la red (así llegan las actualizaciones) y, si no hay señal
    o tarda más de 4 segundos, se usa la copia guardada. Los datos nunca pasan por aquí. */
-const CACHE = 'mi-agenda-v1';
-const SHELL = ['./', 'index.html', 'icon-180.png', 'icon-512.png'];
+const CACHE = 'mi-agenda-v2';
+const SHELL = ['./', 'index.html', 'icono-180.png', 'icono-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
