@@ -425,7 +425,7 @@ function b64d(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='='
 function b64e(s){return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 /* ?k= trae la dirección del servidor y, en el enlace personal, también la clave. Sin clave, la app pide iniciar sesión. */
 function readCfg(){
-  try{const q=new URLSearchParams(location.search).get('k');if(q){const j=JSON.parse(b64d(q));if(j&&j.u&&j.t){lsSet(CFG_KEY,JSON.stringify(j));lsSet(SRV_KEY,j.u);return j}if(j&&j.u)lsSet(SRV_KEY,j.u)}}catch(e){}
+  try{const q=new URLSearchParams(location.search).get('k');if(q){const j=JSON.parse(b64d(q));if(j&&j.u&&j.t){lsSet(CFG_KEY,JSON.stringify(j));lsSet(SRV_KEY,j.u);return j}if(j&&j.u)lsSet(SRV_KEY,j.u);if(j&&Array.isArray(j.n))lsSet('agenda-nombres',JSON.stringify(j.n.slice(0,2).map(x=>String(x).slice(0,30))))}}catch(e){}
   try{const j=JSON.parse(lsGet(CFG_KEY)||'null');return j&&j.u&&j.t?j:null}catch(e){return null}
 }
 let CFG=readCfg();
@@ -1128,10 +1128,10 @@ function calBanner(){
 /* ---------- Primera vez en un dispositivo: iniciar sesión ---------- */
 let loginU=0;
 function vSetup(){
-  const srv=lsGet(SRV_KEY)||'';
+  const srv=lsGet(SRV_KEY)||'',nm=loadJ('agenda-nombres',[]); // los nombres vienen en el enlace, nunca en el código público
   return '<div class="setup"><div class="brand" style="margin-bottom:26px"><span class="logo">'+ICO.check+'</span>Mi agenda</div>'+
     '<h1 style="font-size:28px">Inicia sesión</h1><p class="sub">Elige tu usuario y escribe tu PIN. Solo se pide la primera vez en cada dispositivo.</p>'+
-    '<div class="lbl">¿Quién eres?</div><div class="who" role="group" aria-label="Usuario">'+[1,2].map(n=>'<button type="button" class="whob" data-a="who" data-n="'+n+'" aria-pressed="'+(loginU===n)+'"><i>'+n+'</i>Usuario '+n+'</button>').join('')+'</div>'+
+    '<div class="lbl">¿Quién eres?</div><div class="who" role="group" aria-label="Usuario">'+[1,2].map(n=>'<button type="button" class="whob" data-a="who" data-n="'+n+'" aria-pressed="'+(loginU===n)+'"><i>'+esc(nm[n-1]?nm[n-1].charAt(0).toUpperCase():n)+'</i>'+esc(nm[n-1]||'Usuario '+n)+'</button>').join('')+'</div>'+
     (srv?'':'<label>Dirección del servidor (termina en /exec)<input id="cfU" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>')+
     '<label>PIN<input id="cfT" type="password" inputmode="numeric" autocomplete="current-password" autocapitalize="off" spellcheck="false" maxlength="64"></label>'+
     '<div class="setup-err" id="cfErr" role="status"></div><div class="sfoot" style="justify-content:flex-start"><button class="btn primary" data-a="connect">Entrar</button></div></div>';
