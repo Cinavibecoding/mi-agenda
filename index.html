@@ -293,6 +293,9 @@ h2 small{font:400 13px var(--f-sans);color:var(--ink2)}
 .logo{border-radius:50%}
 html{-webkit-text-size-adjust:100%}
 body{padding-top:env(safe-area-inset-top,0px)}
+/* iPhone (app en inicio): en páginas cortas la barra de abajo quedaba subida y dejaba una franja; la página cubre también la barra de estado */
+html{min-height:calc(100% + env(safe-area-inset-top,0px))}
+.nav{box-shadow:0 160px 0 var(--side)}
 @media(min-width:1000px){.side{padding-top:calc(16px + env(safe-area-inset-top,0px))}}
 .setup-mode .side,.setup-mode .nav,.setup-mode .fab,.setup-mode .fab2{display:none!important}
 .setup-mode .main{margin-left:0!important}
@@ -429,7 +432,7 @@ let syncing=false,syncT=null,net=navigator.onLine===false?'offline':'idle',netEr
 const cleanT=t=>({id:String(t.id),title:String(t.title||''),area:AREAS[t.area]?t.area:'personal',due:t.due||null,time:t.due&&t.time?t.time:null,prio:!!t.prio,done:!!t.done,doneAt:t.doneAt||null,someday:!!t.someday,created:+t.created||0,updated:+t.updated||0,source:t.source||''});
 function calRange(){const f=addDays(mondayOf(today()),-7);return {from:f.toISOString(),to:addDays(f,49).toISOString()}}
 function post(body,cfg){
-  const c=cfg||CFG,ctl=typeof AbortController!=='undefined'?new AbortController():null,tm=ctl?setTimeout(()=>ctl.abort(),30000):0;
+  const c=cfg||CFG,ctl=typeof AbortController!=='undefined'?new AbortController():null,tm=ctl?setTimeout(()=>ctl.abort(),90000):0;
   return fetch(c.u,{method:'POST',body:JSON.stringify(Object.assign({token:c.t},body)),signal:ctl?ctl.signal:undefined,redirect:'follow',credentials:'omit'})
     .then(r=>{clearTimeout(tm);if(!r.ok)throw new Error('HTTP '+r.status);return r.json()},e=>{clearTimeout(tm);throw e});
 }
