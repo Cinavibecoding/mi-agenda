@@ -311,6 +311,7 @@ html{min-height:calc(100% + env(safe-area-inset-top,0px))}
 .mic{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--accent-bg);color:var(--accent);flex:none}
 .mic svg{width:22px;height:22px}
 .mic.on{background:var(--now);color:#fff}
+.mic.wait{background:color-mix(in srgb,var(--now) 30%,var(--accent-bg));color:var(--now)}
 @media(prefers-reduced-motion:no-preference){.mic.on{animation:pulse 1.3s ease-in-out infinite}@keyframes pulse{50%{box-shadow:0 0 0 9px color-mix(in srgb,var(--now) 22%,transparent)}}}
 .micbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;font-size:13.5px;color:var(--ink2)}
 .lang{display:inline-flex;border:1px solid var(--line);border-radius:15px;overflow:hidden}
@@ -519,9 +520,30 @@ const GUESS=[
   ['estambul',/\b(pedido|joya|joyas|joyeria|estambul|cliente|facebook|instagram|pieza|piezas|catalogo|anillo|collar|order|jewelry|store)\b/]
 ];
 const DIAS=['domingo','lunes','martes','miercoles','jueves','viernes','sabado'],DAYS=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+/* El dictado a veces escribe los números con letras ("a las ocho", "eight am"): los pasa a dígitos antes de leer la frase. */
+const NUM_ES={una:1,uno:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10,once:11,doce:12};
+const NUM_EN={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12};
+const DIA_ES=[['primero',1],['uno',1],['dos',2],['tres',3],['cuatro',4],['cinco',5],['seis',6],['siete',7],['ocho',8],['nueve',9],['diez',10],['once',11],['doce',12],['trece',13],['catorce',14],['quince',15],['diecis[eé]is',16],['diecisiete',17],['dieciocho',18],['diecinueve',19],['veinte',20],['veintiuno',21],['veintiún',21],['veintid[oó]s',22],['veintitr[eé]s',23],['veinticuatro',24],['veinticinco',25],['veintis[eé]is',26],['veintisiete',27],['veintiocho',28],['veintinueve',29],['treinta y uno',31],['treinta',30]];
+const MESES='enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre';
+const MONTHS='january|february|march|april|may|june|july|august|september|october|november|december';
+function numWords(r){
+  const es=Object.keys(NUM_ES).join('|'),en=Object.keys(NUM_EN).join('|'),lw=w=>w.toLowerCase();
+  r=' '+r+' ';
+  r=r.replace(/\s(?:al |a )?medio ?d[ií]a(?=[\s.,;!?])/gi,' a las 12:00 pm').replace(/\s(?:a la )?medianoche(?=[\s.,;!?])/gi,' a las 12:00 am')
+     .replace(/\s(?:at )?noon(?=[\s.,;!?])/gi,' at 12:00 pm').replace(/\s(?:at )?midnight(?=[\s.,;!?])/gi,' at 12:00 am');
+  r=r.replace(new RegExp('(\\s(?:a las|a la|sobre las|como a las|tipo))\\s+('+es+')(?=[\\s.,;!?])','gi'),(m,p,w)=>p+' '+NUM_ES[lw(w)]);
+  r=r.replace(new RegExp('\\s('+es+')(?=\\s+(?:de la ma[nñ]ana|de la tarde|de la noche|en punto|am|pm|y media|y cuarto)[\\s.,;!?])','gi'),(m,w)=>' '+NUM_ES[lw(w)]);
+  r=r.replace(new RegExp('(\\s(?:at|around|by))\\s+('+en+')(?=[\\s.,;!?])','gi'),(m,p,w)=>p+' '+NUM_EN[lw(w)]);
+  r=r.replace(new RegExp('\\s('+en+')(?=\\s*(?:am|pm|o.?clock|thirty|fifteen|forty.five|in the)[\\s.,;!?])','gi'),(m,w)=>' '+NUM_EN[lw(w)]);
+  r=r.replace(/(\d{1,2})\s+y\s+media(?=[\s.,;!?])/gi,'$1:30').replace(/(\d{1,2})\s+y\s+cuarto(?=[\s.,;!?])/gi,'$1:15')
+     .replace(/(\d{1,2})\s+(thirty|fifteen|forty.five)(?=[\s.,;!?])/gi,(m,h,x)=>h+':'+(/^th/i.test(x)?'30':/^fi/i.test(x)?'15':'45'))
+     .replace(/\s(?:en punto|o.?clock)(?=[\s.,;!?])/gi,' ');
+  DIA_ES.forEach(([w,n])=>{r=r.replace(new RegExp('\\s(?:el )?'+w+' de ('+MESES+')(?=[\\s.,;!?])','gi'),(m,mes)=>' el '+n+' de '+mes)});
+  return r.trim();
+}
 function nextDow(i){const t=today();let d=(i-t.getDay()+7)%7;if(d===0)d=7;return addDays(t,d)}
 function parseCapture(raw){
-  raw=String(raw).normalize('NFC').replace(/\b([ap])\.\s?m\.?(?=\s|$|[,;])/gi,'$1m');
+  raw=numWords(String(raw).normalize('NFC').replace(/\b([ap])\.\s?m\.?(?=\s|$|[,;])/gi,'$1m'));
   let s=' '+raw+' ',n=' '+norm(raw)+' ';
   const o={area:null,due:null,time:null,prio:false,someday:false,title:''};
   const take=re=>{const m=re.exec(n);if(!m)return null;const a=m.index+m[1].length,b=m.index+m[0].length;s=s.slice(0,a)+' '+s.slice(b);n=n.slice(0,a)+' '+n.slice(b);return m};
@@ -534,8 +556,8 @@ function parseCapture(raw){
   // Hora (antes que la fecha, para que "8 de la mañana" no se lea como "mañana")
   if((m=take(new RegExp('(\\s)(?:a las |a la |sobre las |at )?(\\d{1,2})(?::(\\d{2}))?\\s?(am|pm|de la manana|de la tarde|de la noche|in the morning|in the afternoon|in the evening|at night)'+E)))){
     let h=+m[2];const mi=m[3]||'00',p=m[4];if(/pm|tarde|noche|afternoon|evening|night/.test(p)&&h<12)h+=12;if(/am|manana|morning/.test(p)&&h===12)h=0;if(h<24&&+mi<60)o.time=pad(h)+':'+mi;
-  }else if((m=take(new RegExp('(\\s)(?:a las |a la |sobre las |at )?(\\d{1,2}):(\\d{2})'+E)))){
-    const h=+m[2];if(h<24&&+m[3]<60)o.time=pad(h)+':'+m[3];
+  }else if((m=take(new RegExp('(\\s)(a las |a la |sobre las |at )?(\\d{1,2}):(\\d{2})'+E)))){
+    let h=+m[3];if(m[2]&&h>=1&&h<=7)h+=12;if(h<24&&+m[4]<60)o.time=pad(h)+':'+m[4];
   }else if((m=take(new RegExp('(\\s)(?:a las |a la |at )(\\d{1,2})'+E)))){
     let h=+m[2];if(h>=1&&h<=7)h+=12;if(h<24)o.time=pad(h)+':00';
   }
@@ -545,6 +567,10 @@ function parseCapture(raw){
   else if(take(new RegExp('(\\s)(?:para )?(?:hoy|esta noche|esta tarde)'+E))||take(new RegExp('(\\s)(?:today|tonight)'+E)))o.due=ymd(today());
   else if((m=take(new RegExp('(\\s)(?:para el |para |el |este |el proximo )?('+DIAS.join('|')+')'+E))))o.due=ymd(nextDow(DIAS.indexOf(m[2])));
   else if((m=take(new RegExp('(\\s)(?:on |next |this |by )?('+DAYS.join('|')+')'+E))))o.due=ymd(nextDow(DAYS.indexOf(m[2])));
+  else if((m=take(new RegExp('(\\s)(?:para el |el |on |by )?(\\d{1,2})(?:st|nd|rd|th)? (?:de |of )?('+MESES+'|'+MONTHS+')(?: (?:de |del )?(\\d{4}))?'+E))||(m=take(new RegExp('(\\s)(?:on |by )?('+MONTHS+') (\\d{1,2})(?:st|nd|rd|th)?(?:,? (\\d{4}))?'+E)))&&(m=/^\d/.test(m[2])?m:[m[0],m[1],m[3],m[2],m[4]]))){
+    const ML=(MESES.replace('|setiembre','')).split('|'),mi=ML.indexOf(m[3].replace('setiembre','septiembre'))>-1?ML.indexOf(m[3].replace('setiembre','septiembre')):MONTHS.split('|').indexOf(m[3]);
+    const dd=+m[2];let yy=m[4]?+m[4]:today().getFullYear();let d=new Date(yy,mi,dd);if(!m[4]&&d<today())d=new Date(yy+1,mi,dd);if(mi>-1&&d.getMonth()===mi)o.due=ymd(d);
+  }
   else if((m=take(new RegExp('(\\s)(?:para el |el |on )?(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?'+E)))){
     const dd=+m[2],mm=+m[3];let yy=m[4]?+m[4]:today().getFullYear();if(yy<100)yy+=2000;
     let d=new Date(yy,mm-1,dd);if(!m[4]&&d<today())d=new Date(yy+1,mm-1,dd);if(!isNaN(d)&&d.getMonth()===mm-1)o.due=ymd(d);
@@ -974,27 +1000,33 @@ function logout(){
 
 /* ---------- Dictado por voz (español o inglés) ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let rec=null,micLang=lsGet('agenda-voz')||'es-US';
+let rec=null,micState='off',micLang=lsGet('agenda-voz')||'es-US',lastTap=0,micT=null;
 function micUI(){
-  const on=!!rec,b=$('#shMic'),t=$('#micTxt');
-  if(b){b.classList.toggle('on',on);b.setAttribute('aria-label',on?'Detener dictado':'Dictar por voz')}
-  if(t)t.textContent=on?'Escuchando… toca el micrófono para terminar.':'Dictar en';
+  const b=$('#shMic'),t=$('#micTxt');
+  if(b){b.classList.toggle('on',micState==='on');b.classList.toggle('wait',micState==='wait');b.setAttribute('aria-label',micState==='off'?'Dictar por voz':'Detener dictado')}
+  if(t)t.textContent=micState==='wait'?'Activando el micrófono…':micState==='on'?'Te escucho. Toca el micrófono para terminar.':'Dictar en';
   document.querySelectorAll('#micBar [data-lang]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.lang===micLang)));
 }
-function micStop(){if(rec){try{rec.stop()}catch(e){}}}
+function micStop(){clearTimeout(micT);if(rec){try{rec.stop()}catch(e){}}}
 function micStart(){
+  const now=Date.now();if(now-lastTap<800)return;lastTap=now; // un segundo toque accidental no lo apaga
   if(rec){micStop();return}
   if(!SR){$('#shTitle').focus();toast('Toca el micrófono del teclado para dictar.');return}
-  const r=new SR();rec=r;r.lang=micLang;r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
+  const r=new SR();rec=r;r.lang=micLang;r.interimResults=true;r.continuous=true;r.maxAlternatives=1;
   const before=$('#shTitle').value.trim();
-  r.onresult=e=>{let s='';for(let i=0;i<e.results.length;i++)s+=e.results[i][0].transcript;$('#shTitle').value=(before?before+' ':'')+s.trim();fromTyping()};
+  try{$('#shTitle').blur()}catch(e){}
+  micState='wait';micUI();
+  const quiet=ms=>{clearTimeout(micT);micT=setTimeout(()=>{if(rec===r)micStop()},ms)};
+  r.onstart=()=>{if(rec===r){micState='on';micUI();quiet(7000)}}; // si no hablas en 7 s, se apaga solo
+  r.onresult=e=>{let s='';for(let i=0;i<e.results.length;i++)s+=e.results[i][0].transcript;$('#shTitle').value=(before?before+' ':'')+s.trim();fromTyping();quiet(1800)}; // casi 2 s de silencio = terminaste
   r.onerror=e=>{const c=e&&e.error;
     if(c==='not-allowed'||c==='service-not-allowed')toast('Permite el micrófono para dictar, o usa el del teclado.');
     else if(c==='network')toast('El dictado de la app necesita señal. Sin señal, usa el micrófono del teclado.');
-    else if(c&&c!=='no-speech'&&c!=='aborted')toast('No pude escuchar ('+c+').')};
-  r.onend=()=>{if(rec===r)rec=null;micUI()};
-  try{r.start()}catch(e){rec=null;toast('No pude iniciar el dictado.')}
-  micUI();
+    else if(c==='no-speech')toast('No te escuché. Toca el micrófono y habla.');
+    else if(c&&c!=='aborted')toast('No pude escuchar ('+c+').')};
+  r.onend=()=>{clearTimeout(micT);if(rec===r){rec=null;micState='off';micUI()}};
+  try{r.start()}catch(e){rec=null;micState='off';micUI();toast('No pude activar el micrófono. Usa el del teclado.');return}
+  setTimeout(()=>{if(rec===r&&micState==='wait'){try{r.abort()}catch(e){}rec=null;micState='off';micUI();toast('El micrófono no respondió. Prueba otra vez o usa el del teclado.')}},4000);
 }
 
 /* ---------- Arranque ---------- */
