@@ -359,6 +359,7 @@ html{min-height:calc(100% + env(safe-area-inset-top,0px))}
     <label for="shEnd"><span id="shEndL">Hasta (opcional)</span><input type="time" id="shEnd"></label>
   </div>
   <p class="hint" id="shHint"></p>
+  <div id="shRepBox"><div class="lbl">Repetir</div><div class="chips" id="shRep"></div></div>
   <div class="lbl">Lista</div>
   <div class="chips" id="shArea"></div>
   <div id="shPrioBox"><div class="lbl">Prioridad</div>
@@ -424,8 +425,9 @@ const CFG_KEY='agenda-cfg',SRV_KEY='agenda-servidor',PROF_KEY='agenda-perfil';
 function b64d(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return decodeURIComponent(escape(atob(s)))}
 function b64e(s){return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 /* ?k= trae la dirección del servidor y, en el enlace personal, también la clave. Sin clave, la app pide iniciar sesión. */
+let LOGIN=false; // abrir el enlace de la app (sin clave) siempre pregunta quién eres, aunque el teléfono ya tenga una sesión
 function readCfg(){
-  try{const q=new URLSearchParams(location.search).get('k');if(q){const j=JSON.parse(b64d(q));if(j&&j.u&&j.t){lsSet(CFG_KEY,JSON.stringify(j));lsSet(SRV_KEY,j.u);return j}if(j&&j.u)lsSet(SRV_KEY,j.u);if(j&&Array.isArray(j.n))lsSet('agenda-nombres',JSON.stringify(j.n.slice(0,2).map(x=>String(x).slice(0,30))))}}catch(e){}
+  try{const q=new URLSearchParams(location.search).get('k');if(q){const j=JSON.parse(b64d(q));if(j&&j.u&&j.t){lsSet(CFG_KEY,JSON.stringify(j));lsSet(SRV_KEY,j.u);return j}if(j&&j.u){lsSet(SRV_KEY,j.u);LOGIN=true;try{history.replaceState(null,'',location.pathname)}catch(e){}}if(j&&Array.isArray(j.n))lsSet('agenda-nombres',JSON.stringify(j.n.slice(0,2).map(x=>String(x).slice(0,30))))}}catch(e){}
   try{const j=JSON.parse(lsGet(CFG_KEY)||'null');return j&&j.u&&j.t?j:null}catch(e){return null}
 }
 let CFG=readCfg();
@@ -635,7 +637,19 @@ function numWords(r){
   return r.trim();
 }
 function nextDow(i){const t=today();let d=(i-t.getDay()+7)%7;if(d===0)d=7;return addDays(t,d)}
-function parseCapture(raw){
+/* «todos los sábados», «cada semana», «durante 7 semanas», «every monday for 6 weeks» → se repite cada semana N veces. */
+function repeatOf(raw){
+  const W={dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10,once:11,doce:12,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12};
+  let s=' '+String(raw)+' ',n=0,w=false,m;
+  if((m=/\s(?:durante|por)\s(?:las\s)?(?:pr[oó]ximas\s)?(\d{1,2}|[a-z]+)\ssemanas(?=[\s.,;!?])/i.exec(s))||(m=/\sfor\s(?:the\s)?(?:next\s)?(\d{1,2}|[a-z]+)\sweeks(?=[\s.,;!?])/i.exec(s))){
+    const k=/^\d+$/.test(m[1])?+m[1]:W[m[1].toLowerCase()];if(k>1&&k<=52){n=k;s=s.slice(0,m.index)+' '+s.slice(m.index+m[0].length)}}
+  if((m=/\s(?:todas las semanas|cada semana|semanalmente|every week|weekly)(?=[\s.,;!?])/i.exec(s))){w=true;s=s.slice(0,m.index)+' '+s.slice(m.index+m[0].length)}
+  if((m=/\s(?:todos los|cada)\s(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bados?|domingos?)(?=[\s.,;!?])/i.exec(s))){w=true;s=s.slice(0,m.index)+' el '+m[1].replace(/s$/i,'').replace(/^(lune|marte|miercole|miércole|jueve|vierne)$/i,'$1s')+s.slice(m.index+m[0].length)}
+  else if((m=/\severy\s(monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?=[\s.,;!?])/i.exec(s))){w=true;s=s.slice(0,m.index)+' on '+m[1]+s.slice(m.index+m[0].length)}
+  return {raw:s.trim(),n:n||(w?4:0)};
+}
+function parseCapture(raw){const r=repeatOf(raw),o=parseCapture1(r.raw);o.repeat=r.n;return o}
+function parseCapture1(raw){
   raw=numWords(String(raw).normalize('NFC').replace(/\b([ap])\.\s?m\.?(?=\s|$|[,;])/gi,'$1m'));
   let s=' '+raw+' ',n=' '+norm(raw)+' ';
   const o={area:null,due:null,time:null,end:null,kind:'',prio:false,someday:false,title:''};
@@ -897,8 +911,8 @@ function miniMonth(){
 const VIEWS=[['hoy','Hoy','today'],['tareas','Tareas','tareas'],['cal','Calendario','cal']];
 function render(){
   if(!S)return;
-  document.body.classList.toggle('setup-mode',!CFG);
-  if(!CFG){$('#side').innerHTML='';$('#nav').innerHTML='';if(!sheetOpen)$('#main').innerHTML=vSetup();return}
+  document.body.classList.toggle('setup-mode',!CFG||LOGIN);
+  if(!CFG||LOGIN){$('#side').innerHTML='';$('#nav').innerHTML='';if(!sheetOpen)$('#main').innerHTML=vSetup();return}
   const c=counts(),sl=syncLabel(),alert=c.late;
   $('#side').innerHTML='<div class="brand"><span class="logo">'+ICO.check+'</span>Mi agenda</div>'+
     '<button class="create" data-a="new">'+ICO.plus+'Nueva tarea</button>'+miniMonth()+tilesHtml(c)+listsHtml(c)+
@@ -944,8 +958,8 @@ let sheetOpen=false,D=null;
 const showScrim=on=>{$('#scrim').hidden=!on};
 function openSheet(task,presetDue,presetArea,presetTitle,voice){
   closeSheet2(true);
-  D=task?{id:task.id,kind:task.kind==='evento'?'evento':'',kindSet:true,area:task.area,areaSet:true,due:task.due,time:task.time,end:task.end||null,prio:!!task.prio,someday:!!task.someday}
-        :{id:null,kind:'',kindSet:false,area:(AREAS[presetArea]&&presetArea)||lsGet('todo-lastarea')||(PROF&&PROF.user>1?'personal':'uni'),areaSet:!!AREAS[presetArea],due:presetDue||ymd(today()),time:null,end:null,prio:false,someday:false};
+  D=task?{id:task.id,kind:task.kind==='evento'?'evento':'',kindSet:true,area:task.area,areaSet:true,due:task.due,time:task.time,end:task.end||null,prio:!!task.prio,someday:!!task.someday,rep:0}
+        :{id:null,kind:'',kindSet:false,area:(AREAS[presetArea]&&presetArea)||lsGet('todo-lastarea')||(PROF&&PROF.user>1?'personal':'uni'),areaSet:!!AREAS[presetArea],due:presetDue||ymd(today()),time:null,end:null,prio:false,someday:false,rep:0};
   D.man=Object.assign({},D); // lo elegido a mano; lo que pone la frase se recalcula encima en cada tecla
   sheetOpen=true;$('#shTitle').value=task?task.title:(presetTitle||'');
   $('#shDel').hidden=!task;$('#shDel').classList.remove('arm');$('#shDel').textContent='Borrar';
@@ -976,15 +990,18 @@ function drawSheet(){
   $('#shDate').value=D.due||'';$('#shTime').value=D.time||'';$('#shEnd').value=D.end||'';$('#shEnd').disabled=!D.time;
   $('#shTimeL').textContent=ev?'Empieza':'Hora (opcional)';$('#shEndL').textContent=ev?'Termina':'Hasta (opcional)';
   $('#shPrioBox').hidden=ev;
+  $('#shRepBox').hidden=!!D.id||!D.due||D.someday;
+  $('#shRep').innerHTML=chip('rep','0','No',!D.rep)+chip('rep','w','Cada semana',D.rep>0)+(D.rep?'<select id="shRepN" class="chip" aria-label="Cuántas semanas">'+[2,3,4,5,6,7,8,9,10,11,12,16].map(n=>'<option value="'+n+'"'+(n===D.rep?' selected':'')+'>'+n+' semanas</option>').join('')+'</select>':'');
   $('#shHint').textContent=ev?(calOn()?'Se ve en tu agenda y en Google Calendar (calendario «To Do») como «Disponible» y privado: no bloquea tu horario para nadie.':'Se ve en tu agenda como un bloque de tiempo.'):D.time&&D.end?'Ocupa su bloque en el calendario'+(calOn()?', sin bloquear tu horario.':'.'):'';
-  $('#shPrev').innerHTML=(ev?'Evento: ':'Vence: ')+'<b>'+esc(dueLabel())+'</b> · '+esc(AREAS[D.area])+(D.prio&&!ev?' · prioridad alta':'');
+  $('#shPrev').innerHTML=(ev?'Evento: ':'Vence: ')+'<b>'+esc(dueLabel())+'</b> · '+esc(AREAS[D.area])+(D.prio&&!ev?' · prioridad alta':'')+(D.rep&&!D.id&&D.due?' · cada semana, '+D.rep+' veces':'');
 }
 const keep=(...ks)=>{if(D&&D.man)ks.forEach(k=>{D.man[k]=D[k]})};
 function fromTyping(){
   if(D.id)return;
   const p=parseCapture($('#shTitle').value),B=D.man||{};
   // Si dejas de escribir algo («reunión de 3 a 5» → «… de 3 a 5 personas»), su hora se quita; lo que elegiste a mano se queda.
-  Object.assign(D,{due:B.due,time:B.time,end:B.end,someday:B.someday,prio:B.prio,area:B.area,areaSet:B.areaSet,endAuto:false});
+  Object.assign(D,{due:B.due,time:B.time,end:B.end,someday:B.someday,prio:B.prio,area:B.area,areaSet:B.areaSet,rep:B.rep||0,endAuto:false});
+  if(p.repeat)D.rep=p.repeat;
   if(p.due){D.due=p.due;D.someday=false}
   if(p.time)D.time=p.time;
   if(p.end)D.end=p.end;
@@ -1004,7 +1021,10 @@ function saveSheet(){
   if(ev&&!D.time){$('#shPrev').innerHTML='<b>Ponle hora de inicio al evento.</b>';$('#shTime').focus();return}
   const due=D.someday?null:D.due,time=due?D.time:null,end=time&&D.end&&D.end>time?D.end:null,kind=ev&&due&&time?'evento':'',prio=ev?false:D.prio,someday=ev?false:D.someday;
   if(D.id){const t=S.tasks.find(x=>x.id===D.id);if(t){Object.assign(t,{title:title,area:area,due:due,time:time,end:end,kind:kind,prio:prio,someday:someday});if(t.due&&t.created>dueDate(t))t.created=Date.now()}}
-  else{S.tasks.unshift({id:uid(),title:title,area:area,due:due,time:time,end:end,kind:kind,prio:prio,done:false,someday:someday,created:Date.now()});lsSet('todo-lastarea',area);toast((ev?'Evento guardado: ':'Tarea guardada: ')+dueLabel())}
+  else{
+    const n=due&&D.rep>1?D.rep:1; // «cada semana»: una copia por semana
+    for(let i=n-1;i>=0;i--)S.tasks.unshift({id:uid(),title:title,area:area,due:i?ymd(addDays(parseYmd(due),7*i)):due,time:time,end:end,kind:kind,prio:prio,done:false,someday:someday,created:Date.now()});
+    lsSet('todo-lastarea',area);toast((ev?'Evento guardado: ':'Tarea guardada: ')+dueLabel()+(n>1?' · '+n+' semanas':''))}
   save();closeSheet();
 }
 
@@ -1042,7 +1062,8 @@ document.addEventListener('click',e=>{
     else if(a==='area'){D.area=v;D.areaSet=true}
     else if(a==='prio')D.prio=v==='1';
     else if(a==='someday'){D.someday=!D.someday}
-    keep('kind','due','someday','time','end','area','areaSet','prio');drawSheet();return;
+    else if(a==='rep'){D.rep=v==='w'?(D.rep||4):0}
+    keep('kind','due','someday','time','end','area','areaSet','prio','rep');drawSheet();return;
   }
   const dc=e.target.closest('.dc');
   if(dc&&e.target===dc){ // tocar un espacio libre del calendario crea un evento a esa hora
@@ -1064,6 +1085,7 @@ document.addEventListener('click',e=>{
   if(a==='notif'){askNotif();return}
   if(a==='syncnow'){if(navigator.onLine===false){toast('Sin señal: se sincroniza solo cuando vuelva.');return}net='idle';render();sync();return}
   if(a==='connect'){connect();return}
+  if(a==='keepses'){LOGIN=false;render();return}
   if(a==='who'){loginU=+b.dataset.n;document.querySelectorAll('.whob').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));const p=$('#cfT');if(p)p.focus();return}
   if(a==='qr'){openQR();return}
   if(a==='copylink'){const l=personalLink();(navigator.clipboard?navigator.clipboard.writeText(l):Promise.reject()).then(()=>toast('Enlace copiado.'),()=>toast('No pude copiarlo.'));return}
@@ -1089,6 +1111,7 @@ $('#fab').addEventListener('click',()=>openSheet(null));
 $('#scrim').addEventListener('click',()=>{if(!$('#sheet2').hidden)closeSheet2();else closeSheet()});
 $('#shCancel').addEventListener('click',closeSheet);
 $('#shTitle').addEventListener('input',fromTyping);
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='shRepN'&&D){D.rep=+e.target.value;keep('rep');drawSheet()}});
 $('#shDate').addEventListener('change',e=>{D.due=e.target.value||null;D.someday=false;keep('due','someday');drawSheet()});
 $('#shTime').addEventListener('change',e=>{
   const v=e.target.value||null,old=D.time;D.time=v;if(v&&!D.due)D.due=ymd(today());
@@ -1134,7 +1157,7 @@ function vSetup(){
     '<div class="lbl">¿Quién eres?</div><div class="who" role="group" aria-label="Usuario">'+[1,2].map(n=>'<button type="button" class="whob" data-a="who" data-n="'+n+'" aria-pressed="'+(loginU===n)+'"><i>'+esc(nm[n-1]?nm[n-1].charAt(0).toUpperCase():n)+'</i>'+esc(nm[n-1]||'Usuario '+n)+'</button>').join('')+'</div>'+
     (srv?'':'<label>Dirección del servidor (termina en /exec)<input id="cfU" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>')+
     '<label>PIN<input id="cfT" type="password" inputmode="numeric" autocomplete="current-password" autocapitalize="off" spellcheck="false" maxlength="64"></label>'+
-    '<div class="setup-err" id="cfErr" role="status"></div><div class="sfoot" style="justify-content:flex-start"><button class="btn primary" data-a="connect">Entrar</button></div></div>';
+    '<div class="setup-err" id="cfErr" role="status"></div><div class="sfoot" style="justify-content:flex-start"><button class="btn primary" data-a="connect">Entrar</button>'+(CFG?'<button class="btn" data-a="keepses">Seguir con la sesión de este teléfono</button>':'')+'</div></div>';
 }
 function connect(){
   const uEl=$('#cfU'),u=((uEl&&uEl.value)||lsGet(SRV_KEY)||'').trim(),t=($('#cfT').value||'').trim(),err=$('#cfErr');
@@ -1148,6 +1171,8 @@ function connect(){
       err.textContent=e==='pin'?'Ese PIN no es el de ese usuario.':e==='bloqueado'?'Demasiados intentos. Espera 15 minutos y vuelve a probar.':
         e==='clave'?(longKey?'La clave no coincide con la del servidor.':'Tu servidor todavía no tiene el inicio de sesión: falta actualizarlo.'):'El servidor respondió con un error: '+(e||'desconocido');return}
     const tok=longKey?t:res.token;if(!tok){err.textContent='El servidor no devolvió tu sesión.';return}
+    if(CFG&&CFG.t!==tok){[PROF_KEY,LS,QK,BK,'agenda-cal-v1','agenda-ultima','todo-lastarea','todo-notified'].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});S={tasks:[],closes:[]};queue=[];base={};calSrc={main:null,hol:null};PROF=null;applyProf()} // otra persona: nada del usuario anterior
+    LOGIN=false;
     CFG={u:u,t:tok};lsSet(CFG_KEY,JSON.stringify(CFG));lsSet(SRV_KEY,u);takeProf(res);loginU=0;net='idle';render();sync();
   }).catch(e=>{err.textContent='No pude conectar. Revisa tu señal. ('+((e&&e.message)||e)+')'});
 }
